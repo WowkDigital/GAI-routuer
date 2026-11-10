@@ -26,11 +26,11 @@ async function overview(db) {
   const now = Date.now();
   const minute = now - 60_000;
   const day = pacificDayStart(now);
-  const [projects, keys, apps, quotas, recent] = await db.batch([
+  const [projects, keys, apps, quotas, usage, recent] = await db.batch([
     statement(db, 'SELECT id, name FROM projects ORDER BY name'),
     statement(db, `
       SELECT id, project_id, label, encrypted_key IS NOT NULL AS active, created_at
-      FROM google_keys ORDER BY created_at DESC LIMIT 200
+      FROM google_keys ORDER BY created_at DESC, rowid DESC LIMIT 200
     `),
     statement(db, `
       WITH counts AS (
@@ -44,20 +44,16 @@ async function overview(db) {
         COALESCE(hits, 0) AS hits, COALESCE(errors, 0) AS errors, COALESCE(tokens, 0) AS tokens
       FROM apps LEFT JOIN counts ON counts.app_id = apps.id ORDER BY name
     `, now - 86_400_000),
+    statement(db, 'SELECT * FROM quotas ORDER BY project_id, model'),
     statement(db, `
-      WITH usage AS (
-        SELECT project_id, model,
-          SUM(started_at >= ?) AS used_rpm,
-          SUM(CASE WHEN started_at >= ? THEN COALESCE(input_tokens, 0) ELSE 0 END) AS known_tpm,
-          SUM(started_at >= ? AND input_tokens IS NULL) AS missing_tpm,
-          SUM(started_at >= ?) AS used_rpd
-        FROM requests
-        WHERE source = 'google' AND action != 'countTokens' AND started_at >= ?
-        GROUP BY project_id, model
-      )
-      SELECT quotas.*, COALESCE(used_rpm, 0) AS used_rpm, COALESCE(known_tpm, 0) AS known_tpm,
-        COALESCE(missing_tpm, 0) AS missing_tpm, COALESCE(used_rpd, 0) AS used_rpd
-      FROM quotas LEFT JOIN usage USING (project_id, model) ORDER BY project_id, model
+      SELECT project_id, model,
+        SUM(started_at >= ?) AS used_rpm,
+        SUM(CASE WHEN started_at >= ? THEN COALESCE(input_tokens, 0) ELSE 0 END) AS known_tpm,
+        SUM(started_at >= ? AND input_tokens IS NULL) AS missing_tpm,
+        SUM(started_at >= ?) AS used_rpd
+      FROM requests
+      WHERE source = 'google' AND action != 'countTokens' AND started_at >= ?
+      GROUP BY project_id, model
     `, minute, minute, minute, day, Math.min(minute, day)),
     statement(db, `
       SELECT requests.id, app_id, apps.name AS app_name, model, action, started_at, source,
@@ -65,14 +61,20 @@ async function overview(db) {
       FROM requests JOIN apps ON apps.id = requests.app_id ORDER BY started_at DESC, requests.id DESC LIMIT 100
     `)
   ]);
+  const usageKey = row => row.project_id + '/' + row.model;
+  const counters = new Map(usage.results.map(row => [usageKey(row), row]));
   return {
     projects: projects.results, keys: keys.results, apps: apps.results, recent: recent.results,
-    quotas: quotas.results.map(q => ({
-      ...q,
-      remaining_rpm: q.rpm === null ? null : Math.max(0, q.rpm - q.used_rpm),
-      remaining_tpm: q.tpm === null || q.missing_tpm ? null : Math.max(0, q.tpm - q.known_tpm),
-      remaining_rpd: q.rpd === null ? null : Math.max(0, q.rpd - q.used_rpd)
-    }))
+    measured_at: now, usage: usage.results,
+    quotas: quotas.results.map(q => {
+      const { used_rpm = 0, known_tpm = 0, missing_tpm = 0, used_rpd = 0 } = counters.get(usageKey(q)) ?? {};
+      return {
+        ...q, used_rpm, known_tpm, missing_tpm, used_rpd,
+        remaining_rpm: q.rpm === null ? null : Math.max(0, q.rpm - used_rpm),
+        remaining_tpm: q.tpm === null || missing_tpm ? null : Math.max(0, q.tpm - known_tpm),
+        remaining_rpd: q.rpd === null ? null : Math.max(0, q.rpd - used_rpd)
+      };
+    })
   };
 }
 
@@ -105,7 +107,7 @@ export async function routeAdmin(request, env, pathname) {
       if (!result.meta.changes) throw new HttpError(409, 'Project already exists');
       return Response.json({ id: projectId }, { status: 201 });
     }
-    await existingProject(db, projectId);
+    if (path !== 'keys' || data.create_project !== true) await existingProject(db, projectId);
     if (path === 'quotas') {
       const model = required(data.model, 'model', /^[A-Za-z0-9_.-]{1,100}$/);
       const limits = ['rpm', 'tpm', 'rpd'].map(name =>
@@ -121,10 +123,18 @@ export async function routeAdmin(request, env, pathname) {
     const id = crypto.randomUUID();
     if (path === 'keys') {
       const key = required(data.api_key, 'Google auth key', /^[A-Za-z0-9_-]{20,256}$/);
-      const label = required(data.label, 'key label');
-      await statement(db, 'INSERT INTO google_keys VALUES (?, ?, ?, ?, ?)',
-        id, projectId, label, await encrypt(env.KEY_ENCRYPTION_KEY, id, key), Date.now()).run();
-      return Response.json({ id }, { status: 201 });
+      const label = data.label == null || data.label === '' ? 'Klucz Google' : required(data.label, 'key label');
+      const insert = statement(db, 'INSERT INTO google_keys VALUES (?, ?, ?, ?, ?)',
+        id, projectId, label, await encrypt(env.KEY_ENCRYPTION_KEY, id, key), Date.now());
+      if (data.create_project === true) {
+        await db.batch([
+          statement(db, 'INSERT INTO projects VALUES (?, ?) ON CONFLICT DO NOTHING', projectId, projectId),
+          insert
+        ]);
+      } else {
+        await insert.run();
+      }
+      return Response.json({ id, project_id: projectId }, { status: 201 });
     }
 
     const name = required(data.name, 'app name');

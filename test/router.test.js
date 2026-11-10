@@ -169,6 +169,9 @@ test('proxy, cache isolation, SSE, quotas, history, key rotation and revocation'
   assert.equal(stats.quotas[0].remaining_rpm, 7);
   assert.equal(stats.quotas[0].remaining_tpm, 88);
   assert.equal(stats.quotas[0].remaining_rpd, 17);
+  assert.deepEqual(stats.usage, [{
+    project_id, model, used_rpm: 3, known_tpm: 12, missing_tpm: 0, used_rpd: 3
+  }]);
   assert.equal(stats.keys.some(key => 'encrypted_key' in key), false);
   assert.equal(stats.apps.some(app => 'token_hash' in app), false);
   const detail = await admin('requests/' + first.headers.get('X-Request-Id'));
@@ -335,4 +338,23 @@ test('password login is opt-in, rate-limited and revoked when the passkey owner 
   assert.equal((await auth('verify', { salt, proof })).status, 401);
   assert.equal((await admin('password', 'DELETE')).status, 204);
   assert.equal((await status()).json.passwordEnabled, false);
+});
+
+test('a key can create its project in one call without changing existing project settings', async t => {
+  const { env, admin } = fixture();
+  t.after(() => env.DB.database.close());
+  const project_id = 'create-from-key';
+  const body = { project_id, create_project: true, api_key: 'test_google_key_not_a_real_secret' };
+  assert.equal((await admin('keys', 'POST', { ...body, api_key: 'bad' })).status, 400);
+  assert.equal((await admin('overview')).json.projects.length, 0);
+  const created = await admin('keys', 'POST', body);
+  assert.equal(created.status, 201);
+  assert.equal(created.json.project_id, project_id);
+  const first = (await admin('overview')).json;
+  assert.deepEqual(first.projects, [{ id: project_id, name: project_id }]);
+  assert.equal(first.keys[0].label, 'Klucz Google');
+
+  env.DB.database.prepare('UPDATE projects SET name = ? WHERE id = ?').run('Moja nazwa', project_id);
+  assert.equal((await admin('keys', 'POST', { ...body, label: 'Kolejny klucz' })).status, 201);
+  assert.equal((await admin('overview')).json.projects[0].name, 'Moja nazwa');
 });

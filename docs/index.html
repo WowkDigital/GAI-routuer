@@ -11,110 +11,174 @@
   <script src="./app.js" type="module"></script>
 </head>
 <body>
-<main>
-  <header>
-    <p class="eyebrow">Panel administracyjny</p>
-    <h1>Gemini Router</h1>
-    <p>Klucze Google, tokeny aplikacji i ruch przez router.</p>
-  </header>
+<section id="auth-panel" class="auth-panel">
+  <div class="auth-brand"><span class="brand-mark">G</span><span>Gemini Router</span></div>
+  <p class="eyebrow">Panel administratora</p>
+  <h1>Centrum Gemini</h1>
+  <p class="muted">Zarządzaj projektami, sprawdzaj dostępne limity i monitoruj ruch aplikacji w jednym miejscu.</p>
+  <form id="connect" hidden><button>Zaloguj się kluczem dostępu</button></form>
+  <form id="password-login" class="stack" hidden>
+    <label>Hasło <input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+    <button class="secondary">Zaloguj się hasłem</button>
+  </form>
+  <form id="register" class="stack" autocomplete="off" hidden>
+    <label>Kod pierwszej rejestracji <input name="enrollment" type="password" required autocomplete="off"></label>
+    <button>Zarejestruj klucz dostępu</button>
+  </form>
+  <p id="status" role="status">Sprawdzanie połączenia z Workerem…</p>
+</section>
 
-  <section aria-label="Połączenie">
-    <form id="connect" autocomplete="off" hidden>
-      <button>Zaloguj się kluczem dostępu</button>
-    </form>
-    <form id="password-login" class="password-form" hidden>
-      <label>Hasło <input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
-      <button>Zaloguj się hasłem</button>
-    </form>
-    <form id="register" autocomplete="off" hidden>
-      <label>Kod pierwszej rejestracji <input name="enrollment" type="password" required autocomplete="off"></label>
-      <button>Zarejestruj klucz dostępu</button>
-    </form>
-    <p id="status" role="status">Sprawdzanie połączenia z Workerem…</p>
-  </section>
+<div id="dashboard" class="shell" hidden>
+  <aside class="sidebar">
+    <a href="#przeglad" class="wordmark"><span class="brand-mark">G</span><span>Gemini Router<small>PANEL ADMINISTRATORA</small></span></a>
+    <p class="nav-label">OBSZAR ROBOCZY</p>
+    <nav aria-label="Moduły panelu">
+      <a href="#przeglad" data-nav="przeglad"><span aria-hidden="true">01</span> Przegląd</a>
+      <a href="#limity" data-nav="limity"><span aria-hidden="true">02</span> Limity modeli</a>
+      <a href="#klucze" data-nav="klucze"><span aria-hidden="true">03</span> Klucze API</a>
+      <a href="#aplikacje" data-nav="aplikacje"><span aria-hidden="true">04</span> Aplikacje</a>
+      <a href="#historia" data-nav="historia"><span aria-hidden="true">05</span> Historia</a>
+      <a href="#bezpieczenstwo" data-nav="bezpieczenstwo"><span aria-hidden="true">06</span> Bezpieczeństwo</a>
+    </nav>
+    <div class="sidebar-footer"><span class="connection-dot"></span> Sesja administratora</div>
+  </aside>
 
-  <div id="dashboard" hidden>
-    <div class="toolbar">
-      <button id="refresh">Odśwież dane</button>
-      <button id="disconnect" class="secondary">Wyloguj się</button>
-    </div>
-    <section id="password-settings" hidden>
-      <h2>Logowanie hasłem</h2>
-      <p id="password-state" class="muted"></p>
-      <form id="set-password" class="password-form">
-        <label>Nowe hasło (min. 16 znaków)
-          <input name="password" type="password" autocomplete="new-password" minlength="16" maxlength="128" required>
-        </label>
-        <label>Powtórz nowe hasło
-          <input name="confirmation" type="password" autocomplete="new-password" minlength="16" maxlength="128" required>
-        </label>
-        <button>Zapisz hasło</button>
-        <button id="disable-password" class="secondary" type="button" hidden>Wyłącz hasło</button>
-      </form>
+  <main id="workspace" class="workspace">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow" id="page-kicker">Panel administracyjny</p>
+        <h1 id="page-title" tabindex="-1">Przegląd</h1>
+        <p class="muted" id="page-description"></p>
+      </div>
+      <div class="page-actions">
+        <button id="refresh" class="secondary" type="button">Odśwież</button>
+        <button id="disconnect" class="secondary" type="button">Wyloguj się</button>
+      </div>
+    </header>
+    <p id="notice" class="notice" role="status" hidden></p>
+
+    <section data-view="przeglad" aria-label="Przegląd">
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Ruch z ostatnich 24 godzin</p>
+          <h2>Aktywność routera</h2>
+          <p>Zapytania i tokeny są przypisane do aplikacji. Trafienia w cache omijają Google.</p>
+        </div>
+        <a class="button-link" href="#limity">Sprawdź limity <span aria-hidden="true">→</span></a>
+      </div>
+      <div id="summary" class="grid summary-grid"></div>
+      <div class="grid quick-grid">
+        <article class="card"><p class="eyebrow">Konfiguracja</p><h2>Klucze i projekty</h2><p class="muted">Podłącz projekt Google Cloud, dodając jego klucz API w jednym formularzu.</p><a href="#klucze" class="text-link">Przejdź do kluczy →</a></article>
+        <article class="card"><p class="eyebrow">Integracje</p><h2>Tokeny aplikacji</h2><p class="muted">Rozdziel dostęp aplikacji i zdecyduj, kiedy zapisywać treść lub używać cache.</p><a href="#aplikacje" class="text-link">Przejdź do aplikacji →</a></article>
+        <article class="card"><p class="eyebrow">Diagnostyka</p><h2>Historia zapytań</h2><p class="muted">Sprawdź status, źródło odpowiedzi i zapisane szczegóły ostatnich wywołań.</p><a href="#historia" class="text-link">Przejdź do historii →</a></article>
+      </div>
     </section>
-    <section>
-      <h2>Limity projektów i modeli</h2>
-      <p class="muted">Szacowany zapas według ruchu przez router. RPD resetuje się o północy w strefie pacyficznej. Wpisz limity z Google AI Studio.</p>
-      <div class="scroll" id="quotas"></div>
+
+    <section data-view="limity" aria-label="Limity modeli" hidden>
+      <div class="card limit-controls">
+        <div class="filter-grid">
+          <label>Projekt Google Cloud <select id="limit-project" aria-label="Projekt do sprawdzenia limitów"></select></label>
+          <label>Szukaj modelu <input id="limit-search" type="search" placeholder="Nazwa lub identyfikator"></label>
+        </div>
+        <div class="filters" id="limit-filters" aria-label="Kategorie modeli"></div>
+        <p class="muted caption" id="limit-note"></p>
+      </div>
+      <div class="section-heading"><h2>Katalog modeli</h2><span class="caption" id="limit-count"></span></div>
+      <div id="quotas" class="grid model-grid"></div>
+      <details class="card advanced" id="custom-quota">
+        <summary>Ustaw własny limit projektu</summary>
+        <form data-resource="quotas" class="stack">
+          <label>Projekt <select name="project_id" required></select></label>
+          <label>Identyfikator modelu <input name="model" required maxlength="100" placeholder="np. gemini-2.5-flash"></label>
+          <div class="quota-fields">
+            <label>RPM <input name="rpm" type="number" min="1" max="1000000000"></label>
+            <label>TPM <input name="tpm" type="number" min="1" max="1000000000"></label>
+            <label>RPD <input name="rpd" type="number" min="1" max="1000000000"></label>
+          </div>
+          <p class="caption muted">Puste pole pozostawia wartość referencyjną, jeśli model jest w katalogu.</p>
+          <button>Zapisz limity</button>
+        </form>
+      </details>
+      <p class="caption muted">RPM to zapytania na minutę, TPM to tokeny wejściowe na minutę, a RPD to zapytania od północy czasu pacyficznego. <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener noreferrer">Limity mojego projektu w AI Studio ↗</a></p>
     </section>
-    <section>
-      <h2>Aplikacje · ostatnie 24 h</h2>
-      <div class="scroll" id="apps"></div><p class="muted">¹ Tokeny zaraportowane przez Google dla zarejestrowanych wywołań.</p>
-    </section>
-    <section>
-      <h2>Klucze Google</h2>
-      <p class="muted">Każdy projekt korzysta z ostatnio dodanego aktywnego klucza.</p>
-      <div class="scroll" id="keys"></div>
-    </section>
-    <section>
-      <h2>Konfiguracja</h2>
-      <div class="forms">
-        <form data-resource="projects">
-          <h3>Dodaj projekt</h3>
-          <label>ID projektu Google Cloud <input name="project_id" required maxlength="30"></label>
+
+    <section data-view="klucze" aria-label="Klucze API" hidden>
+      <div class="grid split-grid">
+        <article class="card form-card">
+          <p class="eyebrow">Google AI Studio</p><h2>Dodaj klucz API</h2>
+          <p class="muted">Podaj klucz i identyfikator projektu. Jeśli projektu nie ma w panelu, utworzy się automatycznie.</p>
+          <form data-resource="keys" class="stack" autocomplete="off">
+            <label>Identyfikator projektu Google Cloud
+              <input name="project_id" list="key-projects" required minlength="6" maxlength="30" pattern="[a-z][a-z0-9\x2D]{4,28}[a-z0-9]" placeholder="np. moj-projekt-gemini" spellcheck="false">
+              <datalist id="key-projects"></datalist>
+            </label>
+            <label>Klucz API z AI Studio <input name="api_key" type="password" autocomplete="off" required minlength="20" maxlength="256" placeholder="Wklej klucz Google"></label>
+            <details class="optional"><summary>Dodaj własną etykietę (opcjonalnie)</summary><label>Etykieta <input name="label" maxlength="100" placeholder="Klucz Google"></label></details>
+            <button>Dodaj klucz</button>
+          </form>
+        </article>
+        <article class="card guide-card">
+          <p class="eyebrow">Skąd pobrać dane?</p><h2>Projekt i klucz</h2>
+          <ol><li>W Google AI Studio otwórz listę kluczy.</li><li>Skopiuj klucz oraz ID projektu, do którego należy.</li><li>Wklej oba pola i zapisz. Nowy klucz przejmie ruch dla tego projektu.</li></ol>
+          <a class="text-link" href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">Otwórz klucze w AI Studio ↗</a>
+        </article>
+      </div>
+      <div class="section-heading"><h2>Projekty i klucze</h2></div>
+      <div id="keys" class="grid quick-grid"></div>
+      <details class="card advanced"><summary>Dodaj projekt bez klucza</summary>
+        <form data-resource="projects" class="stack">
+          <label>Identyfikator projektu Google Cloud <input name="project_id" required maxlength="30"></label>
           <label>Nazwa <input name="name" required maxlength="100"></label>
           <button>Dodaj projekt</button>
         </form>
-        <form data-resource="keys" autocomplete="off">
-          <h3>Dodaj klucz Google</h3>
-          <label>Projekt <select name="project_id" required></select></label>
-          <label>Etykieta <input name="label" required maxlength="100"></label>
-          <label>Auth key z AI Studio <input name="api_key" type="password" autocomplete="off" required></label>
-          <button>Dodaj klucz</button>
-        </form>
-        <form data-resource="apps">
-          <h3>Dodaj aplikację</h3>
+      </details>
+    </section>
+
+    <section data-view="aplikacje" aria-label="Aplikacje" hidden>
+      <details class="card advanced" id="create-app"><summary>Dodaj aplikację</summary>
+        <form data-resource="apps" class="stack">
           <label>Projekt <select name="project_id" required></select></label>
           <label>Nazwa <input name="name" required maxlength="100"></label>
-          <label>TTL cache w sekundach <input name="cache_seconds" type="number" min="0" max="86400" value="0"></label>
-          <label class="check"><input name="log_bodies" type="checkbox"> Zapisuj treść do debugowania przez 24 h</label>
+          <label>Czas cache w sekundach <input name="cache_seconds" type="number" min="0" max="86400" value="0"></label>
+          <label class="check"><input name="log_bodies" type="checkbox"> Zapisuj treść do debugowania przez 24 godziny</label>
           <button>Utwórz token</button>
         </form>
-        <form data-resource="quotas">
-          <h3>Ustaw limity modelu</h3>
-          <label>Projekt <select name="project_id" required></select></label>
-          <label>Model <input name="model" required placeholder="ID modelu z AI Studio"></label>
-          <div class="quota-fields">
-            <label>RPM <input name="rpm" type="number" min="1"></label>
-            <label>TPM <input name="tpm" type="number" min="1"></label>
-            <label>RPD <input name="rpd" type="number" min="1"></label>
-          </div>
-          <button>Zapisz limity</button>
-        </form>
+      </details>
+      <div id="new-token" class="card issued" hidden>
+        <label>Token aplikacji. Skopiuj go teraz. <input id="issued-token" readonly autocomplete="off"></label>
+        <div class="page-actions"><button id="copy-token" type="button">Kopiuj</button><button id="hide-token" class="secondary" type="button">Ukryj</button></div>
       </div>
-      <div id="new-token" hidden>
-        <label>Token nowej aplikacji. Skopiuj go teraz.
-          <input id="issued-token" readonly autocomplete="off">
-        </label>
-        <button id="hide-token" class="secondary">Ukryj token</button>
+      <div class="section-heading"><h2>Twoje aplikacje</h2><span class="caption muted">Statystyki z 24 godzin</span></div>
+      <div id="apps" class="grid quick-grid"></div>
+    </section>
+
+    <section data-view="historia" aria-label="Historia zapytań" hidden>
+      <div class="card">
+        <div class="filter-grid">
+          <label>Wyszukaj zapytanie <input id="history-search" type="search" placeholder="Model, aplikacja lub ID zapytania"></label>
+          <label>Źródło <select id="history-source" aria-label="Źródło zapytania"><option value="">Wszystkie źródła</option><option value="google">Google</option><option value="cache">Cache</option><option value="router">Router</option></select></label>
+        </div>
+        <p class="muted caption" id="history-count"></p>
+        <div class="scroll" id="recent"></div>
       </div>
     </section>
-    <section>
-      <h2>Ostatnie zapytania</h2>
-      <div class="scroll" id="recent"></div>
+
+    <section data-view="bezpieczenstwo" aria-label="Bezpieczeństwo" hidden>
+      <div class="grid split-grid">
+        <article class="card"><p class="eyebrow">Dostęp administratora</p><h2>Twoja sesja</h2><p id="session-method" class="muted"></p><p id="session-expiry" class="caption"></p></article>
+        <article class="card" id="password-settings" hidden>
+          <h2>Logowanie hasłem</h2><p id="password-state" class="muted"></p>
+          <form id="set-password" class="stack">
+            <label>Nowe hasło (min. 16 znaków) <input name="password" type="password" autocomplete="new-password" minlength="16" maxlength="128" required></label>
+            <label>Powtórz nowe hasło <input name="confirmation" type="password" autocomplete="new-password" minlength="16" maxlength="128" required></label>
+            <div class="page-actions"><button>Zapisz hasło</button><button id="disable-password" class="secondary" type="button" hidden>Wyłącz hasło</button></div>
+          </form>
+        </article>
+      </div>
     </section>
-  </div>
-</main>
+    <footer class="workspace-footer">Gemini Router <span id="updated-at"></span></footer>
+  </main>
+</div>
 <dialog id="detail" aria-labelledby="detail-title">
   <header><h2 id="detail-title">Szczegóły zapytania</h2><button id="close-detail" class="secondary">Zamknij</button></header>
   <pre id="detail-meta"></pre>

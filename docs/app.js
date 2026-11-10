@@ -1,4 +1,5 @@
 import { workerOrigin } from './config.js';
+import { workspace } from './workspace.js';
 
 const get = id => document.getElementById(id);
 if (window.top !== window.self) {
@@ -11,10 +12,18 @@ let pending = false;
 let editedApp = null;
 let expiryTimer;
 let passwordEnabled = false;
+const panel = workspace({
+  openRequest: id => void perform(() => showDetail(id)),
+  editApp,
+  disableKey: key => void perform(() => disableKey(key))
+});
 
 function status(message, error = false) {
   get('status').textContent = message;
   get('status').classList.toggle('error', error);
+  get('notice').textContent = message;
+  get('notice').hidden = !message;
+  get('notice').classList.toggle('error', error);
   if (get('app-settings').open && error) get('settings-status').textContent = message;
 }
 
@@ -68,7 +77,8 @@ function clearSession() {
   clearDetail();
   if (get('app-settings').open) get('app-settings').close();
   get('dashboard').hidden = true;
-  for (const id of ['quotas', 'apps', 'keys', 'recent']) get(id).replaceChildren();
+  get('auth-panel').hidden = false;
+  panel.clear();
   get('connect').hidden = false;
   get('password-login').hidden = !passwordEnabled;
   get('password-settings').hidden = true;
@@ -109,13 +119,18 @@ async function completeLogin(result) {
   get('connect').hidden = true;
   get('password-login').hidden = true;
   get('password-settings').hidden = session.authMethod !== 'passkey';
+  get('session-method').textContent = session.authMethod === 'passkey'
+    ? 'Zalogowano kluczem dostępu.' : 'Zalogowano hasłem. Ustawienia hasła są dostępne po zalogowaniu kluczem dostępu.';
+  get('session-expiry').textContent = 'Sesja wygaśnie: ' + date.format(session.expiresAt);
   expiryTimer = setTimeout(() => {
     clearSession();
     status('Sesja wygasła. Zaloguj się ponownie.');
   }, Math.max(0, session.expiresAt - Date.now()));
   try {
     await refresh();
+    get('auth-panel').hidden = true;
     get('dashboard').hidden = false;
+    status('');
   } catch (error) {
     clearSession();
     throw error;
@@ -193,7 +208,10 @@ get('register').addEventListener('submit', event => {
   void perform(() => startPasskey('register', enrollment));
 });
 
-get('refresh').addEventListener('click', () => void perform(refresh));
+get('refresh').addEventListener('click', () => void perform(async () => {
+  await refresh();
+  status('Dane zostały odświeżone.');
+}));
 get('disconnect').addEventListener('click', () => void perform(async () => {
   const token = session?.token;
   clearSession();
@@ -201,85 +219,23 @@ get('disconnect').addEventListener('click', () => void perform(async () => {
   status('Wylogowano.');
 }));
 get('hide-token').addEventListener('click', clearIssuedToken);
+get('copy-token').addEventListener('click', () => void perform(async () => {
+  await navigator.clipboard.writeText(get('issued-token').value);
+  status('Token został skopiowany.');
+}));
 get('close-detail').addEventListener('click', clearDetail);
 get('detail').addEventListener('close', clearDetail);
 get('close-settings').addEventListener('click', () => get('app-settings').close());
 
-function action(text, handle) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'secondary';
-  button.textContent = text;
-  button.addEventListener('click', () => void perform(handle));
-  return button;
+async function refresh(project) {
+  panel.load(await api('overview'), project);
 }
 
-function table(id, columns, rows) {
-  const container = get(id);
-  if (rows.length === 0) {
-    container.textContent = 'Brak danych.';
-    return;
-  }
-  const grid = document.createElement('table');
-  const header = grid.createTHead().insertRow();
-  for (const column of columns) {
-    const cell = document.createElement('th');
-    cell.scope = 'col';
-    cell.textContent = column;
-    header.append(cell);
-  }
-  const body = grid.createTBody();
-  for (const values of rows) {
-    const row = body.insertRow();
-    for (const value of values) {
-      const cell = row.insertCell();
-      if (value instanceof Node) cell.append(value);
-      else cell.textContent = value ?? '—';
-    }
-  }
-  container.replaceChildren(grid);
-}
-
-function quota(limit, remaining, known, missing) {
-  if (limit === null) return '—';
-  if (remaining === null) return 'brak estymacji (' + known + ' zliczonych, ' + missing + ' bez danych)';
-  return remaining + ' / ' + limit;
-}
-
-async function refresh() {
-  const data = await api('overview');
-  const projects = new Map(data.projects.map(project => [project.id, project.name]));
-  for (const select of document.querySelectorAll('select[name="project_id"]')) {
-    const previous = select.value;
-    select.replaceChildren(new Option('Wybierz projekt', ''));
-    for (const project of data.projects) select.add(new Option(project.name + ' · ' + project.id, project.id));
-    select.value = projects.has(previous) ? previous : '';
-  }
-  table('quotas', ['Projekt', 'Model', 'RPM pozostało', 'TPM pozostało', 'RPD pozostało'], data.quotas.map(q => [
-    projects.get(q.project_id), q.model, quota(q.rpm, q.remaining_rpm),
-    quota(q.tpm, q.remaining_tpm, q.known_tpm, q.missing_tpm), quota(q.rpd, q.remaining_rpd)
-  ]));
-  table('apps', ['Aplikacja', 'Projekt', 'Żądania', 'Do Google', 'Cache', 'Błędy', 'Tokeny¹', 'Zapis treści', 'Dostęp'], data.apps.map(a => [
-    a.name, projects.get(a.project_id), a.requests, a.google_calls, a.hits, a.errors, a.tokens,
-    a.log_bodies ? 'włączony' : 'wyłączony',
-    a.revoked_at ? 'unieważniony' : action('Ustawienia', () => editApp(a))
-  ]));
-  table('keys', ['Etykieta', 'Projekt', 'Dodano', 'Stan'], data.keys.map(k => [
-    k.label, projects.get(k.project_id), date.format(k.created_at),
-    k.active ? action('Wyłącz', () => revoke('keys', k.id, k.label)) : 'wyłączony'
-  ]));
-  table('recent', ['Czas', 'Aplikacja', 'Model', 'Źródło', 'Status', 'Czas (ms)', 'Tokeny¹', 'Szczegóły'], data.recent.map(r => [
-    date.format(r.started_at), r.app_name, r.model, r.source, r.status, r.latency_ms, r.total_tokens,
-    action('Otwórz', () => showDetail(r.id))
-  ]));
-  status('Zalogowano. Dane odświeżone o ' + date.format(Date.now()) + '.');
-}
-
-async function revoke(resource, id, label) {
-  if (!window.confirm('Wyłączyć dostęp dla „' + label + '”?')) return;
-  await api(resource + '/' + id, { method: 'DELETE' });
-  clearIssuedToken();
+async function disableKey(key) {
+  if (!window.confirm('Wyłączyć klucz „' + key.label + '”?')) return;
+  await api('keys/' + key.id, { method: 'DELETE' });
   await refresh();
+  status('Klucz został wyłączony.');
 }
 
 for (const form of document.querySelectorAll('form[data-resource]')) {
@@ -292,10 +248,22 @@ for (const form of document.querySelectorAll('form[data-resource]')) {
         if (name in data) data[name] = data[name] === '' ? null : Number(data[name]);
       }
       if (resource === 'apps') data.log_bodies = form.elements.log_bodies.checked;
+      if (resource === 'keys') {
+        data.create_project = true;
+        data.label = data.label.trim();
+        form.elements.api_key.value = '';
+      }
       const result = await api(resource, { method: 'POST', body: data });
       form.reset();
       if (result.token) showIssuedToken(result.token);
-      await refresh();
+      await refresh(resource === 'keys' ? result.project_id : resource === 'quotas' ? data.project_id : undefined);
+      const messages = {
+        keys: 'Klucz dodany. Od teraz router używa go w tym projekcie.',
+        projects: 'Projekt został dodany.',
+        apps: 'Aplikacja została utworzona. Skopiuj jej token.',
+        quotas: 'Limity projektu zostały zapisane.'
+      };
+      status(messages[resource]);
     });
   });
 }
@@ -320,6 +288,7 @@ get('edit-app').addEventListener('submit', event => {
     } });
     get('app-settings').close();
     await refresh();
+    status('Ustawienia aplikacji zostały zapisane.');
   });
 });
 
@@ -329,6 +298,7 @@ get('rotate-app').addEventListener('click', () => void perform(async () => {
   get('app-settings').close();
   showIssuedToken(result.token);
   await refresh();
+  status('Nowy token jest gotowy do skopiowania.');
 }));
 
 get('revoke-app').addEventListener('click', () => void perform(async () => {
@@ -337,6 +307,7 @@ get('revoke-app').addEventListener('click', () => void perform(async () => {
   get('app-settings').close();
   clearIssuedToken();
   await refresh();
+  status('Token aplikacji został unieważniony.');
 }));
 
 function formatBody(raw) {
