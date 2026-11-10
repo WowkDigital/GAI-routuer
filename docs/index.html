@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src __WORKER_ORIGIN__; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Gemini Router · Panel</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./webauthn.js" defer></script>
+  <script src="./app.js" type="module"></script>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Panel administracyjny</p>
+    <h1>Gemini Router</h1>
+    <p>Klucze Google, tokeny aplikacji i ruch przez router.</p>
+  </header>
+
+  <section aria-label="Połączenie">
+    <form id="connect" autocomplete="off" hidden>
+      <button>Zaloguj się kluczem dostępu</button>
+    </form>
+    <form id="register" autocomplete="off" hidden>
+      <label>Kod pierwszej rejestracji <input name="enrollment" type="password" required autocomplete="off"></label>
+      <button>Zarejestruj klucz dostępu</button>
+    </form>
+    <p id="status" role="status">Sprawdzanie połączenia z Workerem…</p>
+  </section>
+
+  <div id="dashboard" hidden>
+    <div class="toolbar">
+      <button id="refresh">Odśwież dane</button>
+      <button id="disconnect" class="secondary">Wyloguj się</button>
+    </div>
+    <section>
+      <h2>Limity projektów i modeli</h2>
+      <p class="muted">Szacowany zapas według ruchu przez router. RPD resetuje się o północy w strefie pacyficznej. Wpisz limity z Google AI Studio.</p>
+      <div class="scroll" id="quotas"></div>
+    </section>
+    <section>
+      <h2>Aplikacje · ostatnie 24 h</h2>
+      <div class="scroll" id="apps"></div><p class="muted">¹ Tokeny zaraportowane przez Google dla zarejestrowanych wywołań.</p>
+    </section>
+    <section>
+      <h2>Klucze Google</h2>
+      <p class="muted">Każdy projekt korzysta z ostatnio dodanego aktywnego klucza.</p>
+      <div class="scroll" id="keys"></div>
+    </section>
+    <section>
+      <h2>Konfiguracja</h2>
+      <div class="forms">
+        <form data-resource="projects">
+          <h3>Dodaj projekt</h3>
+          <label>ID projektu Google Cloud <input name="project_id" required maxlength="30"></label>
+          <label>Nazwa <input name="name" required maxlength="100"></label>
+          <button>Dodaj projekt</button>
+        </form>
+        <form data-resource="keys" autocomplete="off">
+          <h3>Dodaj klucz Google</h3>
+          <label>Projekt <select name="project_id" required></select></label>
+          <label>Etykieta <input name="label" required maxlength="100"></label>
+          <label>Auth key z AI Studio <input name="api_key" type="password" autocomplete="off" required></label>
+          <button>Dodaj klucz</button>
+        </form>
+        <form data-resource="apps">
+          <h3>Dodaj aplikację</h3>
+          <label>Projekt <select name="project_id" required></select></label>
+          <label>Nazwa <input name="name" required maxlength="100"></label>
+          <label>TTL cache w sekundach <input name="cache_seconds" type="number" min="0" max="86400" value="0"></label>
+          <label class="check"><input name="log_bodies" type="checkbox"> Zapisuj treść do debugowania przez 24 h</label>
+          <button>Utwórz token</button>
+        </form>
+        <form data-resource="quotas">
+          <h3>Ustaw limity modelu</h3>
+          <label>Projekt <select name="project_id" required></select></label>
+          <label>Model <input name="model" required placeholder="ID modelu z AI Studio"></label>
+          <div class="quota-fields">
+            <label>RPM <input name="rpm" type="number" min="1"></label>
+            <label>TPM <input name="tpm" type="number" min="1"></label>
+            <label>RPD <input name="rpd" type="number" min="1"></label>
+          </div>
+          <button>Zapisz limity</button>
+        </form>
+      </div>
+      <div id="new-token" hidden>
+        <label>Token nowej aplikacji. Skopiuj go teraz.
+          <input id="issued-token" readonly autocomplete="off">
+        </label>
+        <button id="hide-token" class="secondary">Ukryj token</button>
+      </div>
+    </section>
+    <section>
+      <h2>Ostatnie zapytania</h2>
+      <div class="scroll" id="recent"></div>
+    </section>
+  </div>
+</main>
+<dialog id="detail" aria-labelledby="detail-title">
+  <header><h2 id="detail-title">Szczegóły zapytania</h2><button id="close-detail" class="secondary">Zamknij</button></header>
+  <pre id="detail-meta"></pre>
+  <h3>Żądanie</h3>
+  <pre id="detail-request"></pre>
+  <h3>Odpowiedź</h3>
+  <pre id="detail-response"></pre>
+</dialog>
+<dialog id="app-settings" aria-labelledby="app-settings-title">
+  <header>
+    <h2 id="app-settings-title">Ustawienia aplikacji</h2>
+    <button id="close-settings" class="secondary" type="button">Zamknij</button>
+  </header>
+  <form id="edit-app">
+    <label>TTL cache w sekundach <input name="cache_seconds" type="number" min="0" max="86400" required></label>
+    <label class="check"><input name="log_bodies" type="checkbox"> Zapisuj treść do debugowania przez 24 h</label>
+    <div class="toolbar">
+      <button>Zapisz ustawienia</button>
+      <button id="rotate-app" class="secondary" type="button">Zmień token</button>
+      <button id="revoke-app" class="secondary" type="button">Unieważnij token</button>
+    </div>
+    <p id="settings-status" role="status"></p>
+  </form>
+</dialog>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "gemini-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.23.0 || ^24.22.0 || ^26.12.0"
+  },
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "build:panel": "node scripts/build-panel.mjs",
+    "deploy": "cf deploy",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.13",
+    "cf": "1.0.0-beta.28",
+    "vite": "8.3.7"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.1.0"
+  }
+}

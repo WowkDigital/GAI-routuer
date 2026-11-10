@@ -1,0 +1,2 @@
+ADMIN_ENROLLMENT=sha256-of-registration-code.expiration-as-epoch-milliseconds
+KEY_ENCRYPTION_KEY=replace-with-base64-of-32-random-bytes
