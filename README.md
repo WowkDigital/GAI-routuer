@@ -21,8 +21,11 @@ Panel jest publikowany przez GitHub Actions na [GitHub Pages](https://wowkdigita
 1. Otwórz panel w zwykłej karcie przeglądarki.
 2. Przy pierwszym uruchomieniu wprowadź otrzymany jednorazowy kod i zarejestruj klucz dostępu (passkey). Przeglądarka poprosi o potwierdzenie przez Windows Hello, telefon, klucz sprzętowy lub zgodny menedżer kluczy dostępu.
 3. Do kolejnych logowań wystarczy zarejestrowany klucz. Sesja wygasa po 30 minutach lub przy wylogowaniu. Odświeżenie karty usuwa token z jej pamięci.
+4. Jeśli chcesz logować się także hasłem, po zalogowaniu kluczem dostępu otwórz sekcję **Logowanie hasłem** i ustaw hasło mające co najmniej 16 znaków. Po wylogowaniu pojawi się drugi formularz logowania. Zmiana lub wyłączenie hasła wymaga sesji uzyskanej przez passkey i kończy wszystkie dotychczasowe sesje hasłowe.
 
 Worker weryfikuje podpis WebAuthn, origin, RP ID oraz obecność weryfikacji użytkownika. Wyzwanie jest jednorazowe i ważne przez 5 minut. Po rejestracji pierwszego administratora kolejne rejestracje są blokowane. W D1 przechowywany jest klucz publiczny i skróty losowych tokenów sesji. Panel trzyma token sesji w pamięci karty. Adres `wowkdigital.github.io` jest wspólnym originem stron GitHub Pages tego konta, więc publikowane na nim aplikacje powinny być zaufane.
+
+Przeglądarka wyprowadza wartość hasła przez PBKDF2-HMAC-SHA-256 (600 000 iteracji, losowa sól). Worker wylicza z niej weryfikator HMAC z odrębnym sekretem `PASSWORD_PEPPER` i zapisuje w D1 tylko sól i weryfikator. Próby weryfikacji są ograniczone do pięciu na minutę na adres IP w każdej lokalizacji Cloudflare.
 
 [SimpleWebAuthn](https://simplewebauthn.dev/docs/packages/server) · [GitHub Pages przez Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 
@@ -45,7 +48,9 @@ $code = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::Ge
 $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($code))).ToLowerInvariant()
 $expiry = [DateTimeOffset]::UtcNow.AddHours(24).ToUnixTimeMilliseconds()
 $key = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-@("ADMIN_ENROLLMENT=$digest.$expiry", "KEY_ENCRYPTION_KEY=$key") | Set-Content -Encoding utf8NoBOM .dev.vars
+$pepper = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+@("ADMIN_ENROLLMENT=$digest.$expiry", "KEY_ENCRYPTION_KEY=$key", "PASSWORD_PEPPER=$pepper") |
+  Set-Content -Encoding utf8NoBOM .dev.vars
 $code
 npm run dev
 ```
@@ -68,7 +73,7 @@ W drugim terminalu uruchom `python -m http.server 8080 --directory panel-dist`. 
 3. Przy pierwszym wdrożeniu utwórz oddzielne wartości produkcyjne w formacie `.dev.vars` opisanym wyżej i wgraj je przez `npx cf deploy --secrets-file .env.production.secrets`. Kod pierwszej rejestracji przekaż administratorowi prywatnie. Zachowaj `KEY_ENCRYPTION_KEY` w menedżerze sekretów. Zmiana tego klucza uniemożliwi odczyt istniejących kluczy Google.
 4. Jeśli zmieni się publiczny adres Workera, zaktualizuj `panel.config.json` i wypchnij zmianę do `main`. GitHub Actions zbuduje i opublikuje panel ponownie.
 
-Odzyskanie dostępu po utracie passkey wymaga dostępu administracyjnego do Cloudflare. Wygeneruj nowy kod i zaktualizuj wyłącznie sekret `ADMIN_ENROLLMENT`. Następnie usuń z D1 rekord klucza w `admin_passkey` oraz rekordy z `admin_sessions` i `admin_challenges`. Zarejestruj nowy klucz przez panel. Operacja zachowuje konfigurację projektów i dane aplikacji.
+Odzyskanie dostępu po utracie passkey wymaga dostępu administracyjnego do Cloudflare. Wygeneruj nowy kod i zaktualizuj wyłącznie sekret `ADMIN_ENROLLMENT`. Następnie usuń w jednej transakcji rekordy z `admin_passkey`, `admin_sessions`, `admin_challenges` i `admin_password`. Zarejestruj nowy klucz przez panel. Operacja zachowuje konfigurację projektów i dane aplikacji.
 
 [Cloudflare CLI](https://developers.cloudflare.com/cf/projects/) · [Sekrety Workera](https://developers.cloudflare.com/workers/configuration/secrets/)
 ## Wywołanie z aplikacji

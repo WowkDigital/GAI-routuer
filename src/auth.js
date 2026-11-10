@@ -4,6 +4,7 @@ import {
 } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import { HttpError, adminAuthorized, objectJson, readLimited, sha256, statement } from './common.js';
+import { loadPassword, routePassword } from './password.js';
 
 const SESSION_MS = 30 * 60_000;
 const CHALLENGE_MS = 5 * 60_000;
@@ -27,17 +28,23 @@ async function sessionHash(request) {
 
 export async function requireSession(request, db) {
   const hash = await sessionHash(request);
-  if (!await statement(db, 'SELECT 1 FROM admin_sessions WHERE token_hash = ? AND expires_at > ?',
-    hash, Date.now()).first()) {
+  const session = await statement(db, 'SELECT auth_method FROM admin_sessions WHERE token_hash = ? AND expires_at > ?',
+    hash, Date.now()).first();
+  if (!session) {
     throw new HttpError(401, 'Sesja wygasła. Zaloguj się ponownie.');
   }
+  return session;
 }
 
-async function createSession(db) {
+async function createSession(db, authMethod = 'passkey', passwordVerifier = null) {
   const token = 'gs_' + nonce();
   const expiresAt = Date.now() + SESSION_MS;
-  await statement(db, 'INSERT INTO admin_sessions VALUES (?, ?)', await sha256(token), expiresAt).run();
-  return Response.json({ token, expiresAt });
+  const result = await statement(db, `
+    INSERT INTO admin_sessions (token_hash, expires_at, auth_method)
+    SELECT ?, ?, ? WHERE ? IS NULL OR EXISTS (SELECT 1 FROM admin_password WHERE verifier = ?)
+  `, await sha256(token), expiresAt, authMethod, passwordVerifier, passwordVerifier).run();
+  if (!result.meta.changes) throw new HttpError(401, 'Hasło zmieniło się. Zaloguj się ponownie.');
+  return Response.json({ token, expiresAt, authMethod });
 }
 
 async function enrollmentAuthorized(request, env) {
@@ -91,13 +98,16 @@ export async function routeAuth(request, env, path) {
   const url = configuredOrigin(env);
   const db = env.DB;
   if (request.method === 'GET' && path === '/auth/status') {
-    return Response.json({ enrolled: Boolean(await loadPasskey(db)) });
+    const [passkey, password] = await Promise.all([loadPasskey(db), loadPassword(db)]);
+    return Response.json({ enrolled: Boolean(passkey), passwordEnabled: Boolean(password) });
   }
   if (request.method !== 'POST') throw new HttpError(405, 'Use POST');
   if (path === '/auth/logout') {
     await statement(db, 'DELETE FROM admin_sessions WHERE token_hash = ?', await sessionHash(request)).run();
     return new Response(null, { status: 204 });
   }
+  const passwordStep = path.match(/^\/auth\/password\/(options|verify)$/);
+  if (passwordStep) return routePassword(request, env, passwordStep[1], createSession);
   const endpoint = path.match(/^\/auth\/(register|login)\/(options|verify)$/);
   if (!endpoint) throw new HttpError(404, 'Unknown authentication endpoint');
   const rate = await env.AUTH_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'local' });

@@ -10,6 +10,7 @@ let session = null;
 let pending = false;
 let editedApp = null;
 let expiryTimer;
+let passwordEnabled = false;
 
 function status(message, error = false) {
   get('status').textContent = message;
@@ -69,6 +70,9 @@ function clearSession() {
   get('dashboard').hidden = true;
   for (const id of ['quotas', 'apps', 'keys', 'recent']) get(id).replaceChildren();
   get('connect').hidden = false;
+  get('password-login').hidden = !passwordEnabled;
+  get('password-settings').hidden = true;
+  get('set-password').reset();
 }
 
 async function perform(task) {
@@ -94,11 +98,17 @@ async function startPasskey(purpose, enrollment) {
   const { id, options } = await api('auth/' + purpose + '/options', { method: 'POST', token: enrollment });
   const usePasskey = purpose === 'register' ? browser.startRegistration : browser.startAuthentication;
   const credential = await usePasskey({ optionsJSON: options });
-  session = await api('auth/' + purpose + '/verify', {
+  await completeLogin(await api('auth/' + purpose + '/verify', {
     method: 'POST', token: enrollment, body: { id, credential }
-  });
+  }));
+}
+
+async function completeLogin(result) {
+  session = result;
   get('register').hidden = true;
   get('connect').hidden = true;
+  get('password-login').hidden = true;
+  get('password-settings').hidden = session.authMethod !== 'passkey';
   expiryTimer = setTimeout(() => {
     clearSession();
     status('Sesja wygasła. Zaloguj się ponownie.');
@@ -111,6 +121,64 @@ async function startPasskey(purpose, enrollment) {
     throw error;
   }
 }
+
+function hex(bytes) {
+  return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function passwordProof(password, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const saltBytes = Uint8Array.from(salt.match(/../g), pair => Number.parseInt(pair, 16));
+  const bits = await crypto.subtle.deriveBits({
+    name: 'PBKDF2', hash: 'SHA-256', iterations: 600_000, salt: saltBytes
+  }, key, 256);
+  return hex(new Uint8Array(bits));
+}
+
+function renderPasswordState() {
+  get('password-state').textContent = passwordEnabled ? 'Logowanie hasłem jest włączone.' : 'Logowanie hasłem jest wyłączone.';
+  get('disable-password').hidden = !passwordEnabled;
+}
+
+get('password-login').addEventListener('submit', event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const password = form.elements.password.value;
+  form.reset();
+  void perform(async () => {
+    const { salt } = await api('auth/password/options', { method: 'POST' });
+    const proof = await passwordProof(password, salt);
+    await completeLogin(await api('auth/password/verify', { method: 'POST', body: { salt, proof } }));
+  });
+});
+
+get('set-password').addEventListener('submit', event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const { password, confirmation } = form.elements;
+  if (password.value !== confirmation.value) {
+    status('Wpisane hasła różnią się.', true);
+    return;
+  }
+  const value = password.value;
+  form.reset();
+  void perform(async () => {
+    const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+    const proof = await passwordProof(value, salt);
+    await api('password', { method: 'PUT', body: { salt, proof } });
+    passwordEnabled = true;
+    renderPasswordState();
+    status('Hasło zostało zapisane.');
+  });
+});
+
+get('disable-password').addEventListener('click', () => void perform(async () => {
+  if (!window.confirm('Wyłączyć logowanie hasłem? Aktywne sesje zalogowane hasłem zostaną zakończone.')) return;
+  await api('password', { method: 'DELETE' });
+  passwordEnabled = false;
+  renderPasswordState();
+  status('Logowanie hasłem zostało wyłączone.');
+}));
 
 get('connect').addEventListener('submit', event => {
   event.preventDefault();
@@ -289,8 +357,11 @@ async function showDetail(id) {
 }
 
 void perform(async () => {
-  const { enrolled } = await api('auth/status');
+  const { enrolled, passwordEnabled: enabled } = await api('auth/status');
+  passwordEnabled = enabled;
+  renderPasswordState();
   get('connect').hidden = !enrolled;
+  get('password-login').hidden = !passwordEnabled;
   get('register').hidden = enrolled;
   status(enrolled ? 'Zaloguj się swoim kluczem dostępu.' : 'Zarejestruj pierwszy klucz administratora.');
 });

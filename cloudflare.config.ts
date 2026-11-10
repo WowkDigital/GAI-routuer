@@ -23,7 +23,11 @@ export default defineConfig(({ mode }) => ({
       AUTH_LIMITER: bindings.rateLimit({
         namespace: '97113902', simple: { limit: 20, period: 60 }
       }),
+      PASSWORD_LIMITER: bindings.rateLimit({
+        namespace: '97113903', simple: { limit: 5, period: 60 }
+      }),
       ADMIN_ENROLLMENT: bindings.secret(),
+      PASSWORD_PEPPER: bindings.secret(),
       KEY_ENCRYPTION_KEY: bindings.secret()
     }
   }

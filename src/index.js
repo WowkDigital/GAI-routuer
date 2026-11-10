@@ -1,6 +1,7 @@
 import { HttpError } from './common.js';
 import { prune, routeAdmin } from './admin.js';
 import { requireSession, routeAuth } from './auth.js';
+import { updatePassword } from './password.js';
 import { routeGemini } from './router.js';
 
 const geminiPath = /^\/(v1beta|v1)\/models\/([A-Za-z0-9_.-]{1,100}):(generateContent|streamGenerateContent|countTokens)$/;
@@ -27,13 +28,16 @@ export default {
         if ((auth || origin) && !allowedOrigin) throw new HttpError(403, 'Origin not allowed');
         if (request.method === 'OPTIONS') {
           return finish(new Response(null, { status: 204, headers: {
-            'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Authorization, Content-Type',
             'Access-Control-Max-Age': '600'
           } }));
         }
         if (auth) return finish(await routeAuth(request, env, url.pathname));
-        await requireSession(request, env.DB);
+        const session = await requireSession(request, env.DB);
+        if (url.pathname === '/admin/password') {
+          return finish(await updatePassword(request, env, session));
+        }
         return finish(await routeAdmin(request, env, url.pathname));
       }
       if (url.pathname === '/health' && request.method === 'GET') {

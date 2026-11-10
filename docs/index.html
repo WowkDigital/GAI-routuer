@@ -22,6 +22,10 @@
     <form id="connect" autocomplete="off" hidden>
       <button>Zaloguj się kluczem dostępu</button>
     </form>
+    <form id="password-login" class="password-form" hidden>
+      <label>Hasło <input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+      <button>Zaloguj się hasłem</button>
+    </form>
     <form id="register" autocomplete="off" hidden>
       <label>Kod pierwszej rejestracji <input name="enrollment" type="password" required autocomplete="off"></label>
       <button>Zarejestruj klucz dostępu</button>
@@ -34,6 +38,20 @@
       <button id="refresh">Odśwież dane</button>
       <button id="disconnect" class="secondary">Wyloguj się</button>
     </div>
+    <section id="password-settings" hidden>
+      <h2>Logowanie hasłem</h2>
+      <p id="password-state" class="muted"></p>
+      <form id="set-password" class="password-form">
+        <label>Nowe hasło (min. 16 znaków)
+          <input name="password" type="password" autocomplete="new-password" minlength="16" maxlength="128" required>
+        </label>
+        <label>Powtórz nowe hasło
+          <input name="confirmation" type="password" autocomplete="new-password" minlength="16" maxlength="128" required>
+        </label>
+        <button>Zapisz hasło</button>
+        <button id="disable-password" class="secondary" type="button" hidden>Wyłącz hasło</button>
+      </form>
+    </section>
     <section>
       <h2>Limity projektów i modeli</h2>
       <p class="muted">Szacowany zapas według ruchu przez router. RPD resetuje się o północy w strefie pacyficznej. Wpisz limity z Google AI Studio.</p>

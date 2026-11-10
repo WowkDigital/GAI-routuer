@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, pbkdf2Sync, randomBytes, sign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
@@ -9,7 +9,7 @@ import { pacificDayStart } from '../src/common.js';
 
 function sqliteBinding() {
   const database = new DatabaseSync(':memory:');
-  for (const file of ['0001_initial.sql', '0002_passkey.sql']) {
+  for (const file of ['0001_initial.sql', '0002_passkey.sql', '0003_password.sql']) {
     database.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   }
   return {
@@ -51,13 +51,15 @@ function fixture({ signedIn = true } = {}) {
   const env = {
     DB,
     ADMIN_ENROLLMENT: hash(enrollment).toString('hex') + '.' + (Date.now() + 60_000),
+    PASSWORD_PEPPER: Buffer.alloc(32, 2).toString('base64'),
     KEY_ENCRYPTION_KEY: Buffer.alloc(32, 4).toString('base64'),
     PANEL_ORIGIN: 'https://owner.github.io',
-    AUTH_LIMITER: { limit: async () => ({ success: true }) }
+    AUTH_LIMITER: { limit: async () => ({ success: true }) },
+    PASSWORD_LIMITER: { limit: async () => ({ success: true }) }
   };
   const adminToken = 'gs_' + 'a'.repeat(64);
   if (signedIn) {
-    DB.database.prepare('INSERT INTO admin_sessions VALUES (?, ?)').run(
+    DB.database.prepare('INSERT INTO admin_sessions (token_hash, expires_at) VALUES (?, ?)').run(
       hash(adminToken).toString('hex'), Date.now() + 60_000
     );
   }
@@ -301,4 +303,36 @@ test('passkey enrollment, signed login, replay protection, expiry and logout', a
   assert.equal((await overview(session.json.token)).status, 200);
   env.DB.database.prepare('UPDATE admin_sessions SET expires_at = 0').run();
   assert.equal((await overview(session.json.token)).status, 401);
+});
+
+test('password login is opt-in, rate-limited and revoked when the passkey owner changes it', async t => {
+  const { env, request, admin } = fixture();
+  t.after(() => env.DB.database.close());
+  const origin = env.PANEL_ORIGIN;
+  const auth = (path, body) => request('/auth/password/' + path, { method: 'POST', origin, body });
+  const status = () => request('/auth/status', { origin });
+  const salt = randomBytes(16).toString('hex');
+  const proof = pbkdf2Sync('a long, distinct password', Buffer.from(salt, 'hex'), 600_000, 32, 'sha256').toString('hex');
+  assert.equal((await status()).json.passwordEnabled, false);
+  assert.equal((await auth('options')).status, 401);
+  assert.equal((await admin('password', 'PUT', { salt, proof })).status, 204);
+  assert.equal((await status()).json.passwordEnabled, true);
+  assert.deepEqual((await auth('options')).json, { salt });
+  assert.notEqual(env.DB.database.prepare('SELECT verifier FROM admin_password').get().verifier, proof);
+  assert.equal((await auth('verify', { salt, proof: '0'.repeat(64) })).status, 401);
+  env.PASSWORD_LIMITER.limit = async () => ({ success: false });
+  assert.equal((await auth('verify', { salt, proof })).status, 429);
+  env.PASSWORD_LIMITER.limit = async () => ({ success: true });
+  const login = await auth('verify', { salt, proof });
+  assert.equal(login.status, 200);
+  assert.equal(login.json.authMethod, 'password');
+  const token = login.json.token;
+  assert.equal((await request('/admin/overview', { origin, token })).status, 200);
+  assert.equal((await request('/admin/password', { method: 'DELETE', origin, token })).status, 403);
+  const nextSalt = randomBytes(16).toString('hex');
+  assert.equal((await admin('password', 'PUT', { salt: nextSalt, proof: '1'.repeat(64) })).status, 204);
+  assert.equal((await request('/admin/overview', { origin, token })).status, 401);
+  assert.equal((await auth('verify', { salt, proof })).status, 401);
+  assert.equal((await admin('password', 'DELETE')).status, 204);
+  assert.equal((await status()).json.passwordEnabled, false);
 });
