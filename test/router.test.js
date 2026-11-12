@@ -9,7 +9,7 @@ import { pacificDayStart } from '../src/common.js';
 
 function sqliteBinding() {
   const database = new DatabaseSync(':memory:');
-  for (const file of ['0001_initial.sql', '0002_passkey.sql', '0003_password.sql']) {
+  for (const file of ['0001_initial.sql', '0002_passkey.sql', '0003_password.sql', '0004_config_token.sql']) {
     database.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   }
   return {
@@ -357,4 +357,26 @@ test('a key can create its project in one call without changing existing project
   env.DB.database.prepare('UPDATE projects SET name = ? WHERE id = ?').run('Moja nazwa', project_id);
   assert.equal((await admin('keys', 'POST', { ...body, label: 'Kolejny klucz' })).status, 201);
   assert.equal((await admin('overview')).json.projects[0].name, 'Moja nazwa');
+});
+
+test('configuration tokens can write configuration and are isolated from administrator access', async t => {
+  const { env, request, admin, adminToken } = fixture();
+  t.after(() => env.DB.database.close());
+  const config = (token, path = '', method = 'GET', body) => request('/config/v1' + path, { token, method, body });
+  assert.equal((await config(adminToken)).status, 401);
+  const issued = await admin('config-token', 'POST');
+  assert.equal(issued.status, 201);
+  const token = issued.json.token;
+  assert.equal((await request('/admin/overview', { token })).status, 401);
+  assert.equal((await config(token, '/projects', 'POST', { project_id, name: 'Test' })).status, 201);
+  assert.equal((await config(token, '/quotas', 'POST', { project_id, model, rpd: 20 })).status, 200);
+  const snapshot = (await config(token)).json;
+  assert.equal(snapshot.quotas[0].remaining_rpd, 20);
+  assert.equal(Object.hasOwn(snapshot, 'recent'), false);
+  assert.equal((await config(token, '/password', 'PUT', {})).status, 404);
+  const replacement = await admin('config-token', 'POST');
+  assert.equal((await config(token)).status, 401);
+  assert.equal((await config(replacement.json.token)).status, 200);
+  assert.equal((await admin('config-token', 'DELETE')).status, 204);
+  assert.equal((await config(replacement.json.token)).status, 401);
 });

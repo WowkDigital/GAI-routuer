@@ -49,61 +49,66 @@ function element(tag, className, label) {
   return node;
 }
 
-function metricCell(metric, tracked) {
-  const wrap = element('div', 'metric');
-  wrap.append(element('p', 'metric-label', metric.key.toUpperCase()));
-  const count = element('p', 'metric-value');
+function metricCell(metric, model, daily = false) {
+  const cell = element('td', daily ? 'quota-day' : 'quota-minute');
   if (metric.unlimited) {
-    count.textContent = 'Bez limitu';
+    cell.append(element('span', 'muted', 'Bez limitu'));
   } else if (metric.remaining !== null) {
-    count.append(element('strong', '', number.format(metric.remaining)),
-      element('span', '', ' / ' + number.format(metric.value)));
+    const amount = element('div', 'quota-amount');
+    amount.append(element('strong', '', number.format(metric.remaining)),
+      element('span', 'muted', ' / ' + number.format(metric.value)));
+    cell.append(amount);
+    if (daily) {
+      const meter = element('meter', metric.remaining / metric.value <= 0.2 ? 'low' : '');
+      meter.max = metric.value;
+      meter.value = metric.remaining;
+      meter.setAttribute('aria-label', model.name + ', pozostałe wywołania dzisiaj');
+      cell.append(meter);
+    }
   } else {
-    count.textContent = metric.value == null ? '—' : tracked ? '— / ' + number.format(metric.value) : number.format(metric.value);
+    const label = metric.value == null ? '—' : model.tracked ? '— / ' + number.format(metric.value) : number.format(metric.value);
+    cell.append(element('span', 'muted', label));
   }
-  wrap.append(count);
-  if (metric.remaining !== null) {
-    const percent = metric.remaining / metric.value;
-    const meter = element('progress', percent <= 0.2 ? 'low' : '');
-    meter.max = metric.value;
-    meter.value = metric.remaining;
-    meter.setAttribute('aria-label', 'Pozostało ' + metric.key.toUpperCase());
-    wrap.append(meter);
-  } else if (tracked && metric.missing > 0) {
-    wrap.append(element('small', 'metric-hint', 'Brak pełnych danych'));
-    wrap.title = 'Google zwrócił tokeny tylko dla części żądań; zliczono ' + number.format(metric.used) + '.';
+  if (metric.missing > 0 && model.tracked && !metric.unlimited) {
+    cell.append(element('small', 'quota-note', 'Brak pełnych danych'));
   }
-  return wrap;
+  return cell;
 }
 
-export function renderLimitCards(container, rows, onEdit) {
-  const categoryNames = new Map(categories);
-  const cards = rows.map(model => {
-    const card = element('article', 'card model-card');
-    const top = element('div', 'model-top');
-    const labels = element('div', 'chips');
-    labels.append(element('span', 'pill', categoryNames.get(model.category)));
-    const status = model.tracked ? 'Pomiar routera' : model.externalApi ? 'Poza pomiarem' : 'Referencja';
-    labels.append(element('span', model.tracked ? 'pill positive' : 'pill subtle', status));
-    top.append(labels, element('h3', '', model.name));
-    if (model.id) top.append(element('p', 'model-code', model.id));
-    card.append(top);
-    const counters = element('div', 'model-metrics');
-    counters.append(...model.metrics.map(metric => metricCell(metric, model.tracked)));
-    card.append(counters);
+export function renderLimitTable(container, rows, onEdit) {
+  if (!rows.length) {
+    container.replaceChildren(element('p', 'quota-empty muted', 'Brak modeli pasujących do filtrów.'));
+    return;
+  }
 
-    const foot = element('div', 'model-foot');
-    const source = model.externalApi && !model.tracked ? model.externalApi :
-      model.hasOverride ? (model.limits ? 'Limity projektu / katalog' : 'Limity projektu') : 'Limity z podanej listy';
-    foot.append(element('span', 'caption muted', source));
+  const categoriesById = new Map(categories);
+  const table = element('table', 'quota-table');
+  table.setAttribute('aria-label', 'Limity modeli');
+  const header = table.createTHead().insertRow();
+  for (const label of ['Model', 'Dziś · RPD', 'RPM', 'TPM', 'Ustawienia']) {
+    const heading = element('th', '', label);
+    heading.scope = 'col';
+    header.append(heading);
+  }
+  const body = table.createTBody();
+  for (const model of rows) {
+    const row = body.insertRow();
+    const title = element('th', 'quota-model', model.name);
+    title.scope = 'row';
+    let description = model.id ?? categoriesById.get(model.category);
+    if (!model.tracked) description += model.externalApi ? ' · ' + model.externalApi + ' · poza pomiarem' : ' · referencja';
+    if (model.hasOverride) description += ' · limit projektu';
+    title.append(element('small', 'quota-note', description));
+    const [rpm, tpm, rpd] = model.metrics;
+    row.append(title, metricCell(rpd, model, true), metricCell(rpm, model), metricCell(tpm, model));
+    const actions = row.insertCell();
     if (model.tracked) {
-      const edit = element('button', 'quiet', 'Ustaw limit');
+      const edit = element('button', 'quiet', 'Edytuj');
       edit.type = 'button';
+      edit.setAttribute('aria-label', 'Edytuj limity ' + model.name);
       edit.addEventListener('click', () => onEdit(model.id));
-      foot.append(edit);
+      actions.append(edit);
     }
-    card.append(foot);
-    return card;
-  });
-  container.replaceChildren(...(cards.length ? cards : [element('p', 'empty card', 'Brak modeli pasujących do filtrów.')]));
+  }
+  container.replaceChildren(table);
 }

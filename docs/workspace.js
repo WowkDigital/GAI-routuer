@@ -1,5 +1,5 @@
 import { categories } from './catalog.js';
-import { limitModels, number, renderLimitCards } from './limits.js';
+import { limitModels, number, renderLimitTable } from './limits.js';
 
 const get = id => document.getElementById(id);
 const date = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
@@ -112,10 +112,10 @@ export function workspace({ openRequest, editApp, disableKey }) {
     const rows = limitModels(data, project, category, get('limit-search').value);
     for (const control of filters) control.setAttribute('aria-pressed', String(control.dataset.category === category));
     get('limit-note').textContent = project
-      ? 'Pozostało / limit. Szacunek obejmuje próby wysłania do Google przez router. Karty poza pomiarem pokazują wartości referencyjne.'
+      ? 'Pozostało / limit według ruchu przez router. Doba zaczyna się o północy czasu pacyficznego. Modele poza pomiarem pokazują wartości referencyjne.'
       : 'Dodaj projekt w module Klucze API, żeby zobaczyć szacowany zapas. Poniżej są wartości z podanej listy.';
     get('limit-count').textContent = number.format(rows.length) + ' pozycji';
-    renderLimitCards(get('quotas'), rows, editLimit);
+    renderLimitTable(get('quotas'), rows, editLimit);
   }
 
   function renderHistory() {

@@ -20,6 +20,8 @@ Panel jest publikowany przez GitHub Actions na [GitHub Pages](https://wowkdigita
 
 Panel ma moduły **Przegląd**, **Limity modeli**, **Klucze API**, **Aplikacje**, **Historia** i **Bezpieczeństwo**. W module **Klucze API** wystarczą klucz z AI Studio i identyfikator projektu Google Cloud. Router automatycznie dodaje brakujący projekt, a etykieta klucza jest opcjonalna.
 
+W module **Bezpieczeństwo** można wygenerować token do zdalnej konfiguracji projektów, kluczy, aplikacji i limitów. Ścieżki, wymagane pola i przykłady wywołań zawiera [instrukcja dla agenta EA](docs/agent.md).
+
 1. Otwórz panel w zwykłej karcie przeglądarki.
 2. Przy pierwszym uruchomieniu wprowadź otrzymany jednorazowy kod i zarejestruj klucz dostępu (passkey). Przeglądarka poprosi o potwierdzenie przez Windows Hello, telefon, klucz sprzętowy lub zgodny menedżer kluczy dostępu.
 3. Do kolejnych logowań wystarczy zarejestrowany klucz. Sesja wygasa po 30 minutach lub przy wylogowaniu. Odświeżenie karty usuwa token z jej pamięci.

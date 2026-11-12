@@ -74,6 +74,7 @@ function clearSession() {
   clearTimeout(expiryTimer);
   session = null;
   clearIssuedToken();
+  clearConfigToken();
   clearDetail();
   if (get('app-settings').open) get('app-settings').close();
   get('dashboard').hidden = true;
@@ -228,8 +229,41 @@ get('detail').addEventListener('close', clearDetail);
 get('close-settings').addEventListener('click', () => get('app-settings').close());
 
 async function refresh(project) {
-  panel.load(await api('overview'), project);
+  const overview = await api('overview');
+  panel.load(overview, project);
+  renderConfigTokenStatus(overview.config_token_expires_at);
 }
+
+function clearConfigToken() {
+  get('config-token-value').value = '';
+  get('config-token-secret').hidden = true;
+}
+
+function renderConfigTokenStatus(expiresAt) {
+  const active = expiresAt > Date.now();
+  get('config-token-status').textContent = active
+    ? 'Token ważny do ' + date.format(expiresAt) : 'Brak aktywnego tokena konfiguracji.';
+  get('create-config-token').textContent = active ? 'Wygeneruj nowy token' : 'Utwórz token';
+  get('revoke-config-token').hidden = !active;
+}
+
+window.addEventListener('hashchange', clearConfigToken);
+get('create-config-token').addEventListener('click', () => void perform(async () => {
+  if (!get('revoke-config-token').hidden && !window.confirm('Zastąpić dotychczasowy token konfiguracji?')) return;
+  const result = await api('config-token', { method: 'POST' });
+  renderConfigTokenStatus(result.expires_at);
+  get('config-token-value').value = result.token;
+  get('config-token-secret').hidden = false;
+  get('config-token-value').focus();
+  get('config-token-value').select();
+}));
+get('revoke-config-token').addEventListener('click', () => void perform(async () => {
+  if (!window.confirm('Unieważnić token konfiguracji?')) return;
+  await api('config-token', { method: 'DELETE' });
+  clearConfigToken();
+  renderConfigTokenStatus(null);
+  status('Token konfiguracji został unieważniony.');
+}));
 
 async function disableKey(key) {
   if (!window.confirm('Wyłączyć klucz „' + key.label + '”?')) return;

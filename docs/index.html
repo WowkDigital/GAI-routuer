@@ -84,7 +84,7 @@
         <p class="muted caption" id="limit-note"></p>
       </div>
       <div class="section-heading"><h2>Katalog modeli</h2><span class="caption" id="limit-count"></span></div>
-      <div id="quotas" class="grid model-grid"></div>
+      <div id="quotas" class="card quota-panel scroll" role="region" aria-label="Tabela limitów modeli" tabindex="0"></div>
       <details class="card advanced" id="custom-quota">
         <summary>Ustaw własny limit projektu</summary>
         <form data-resource="quotas" class="stack">
@@ -166,6 +166,18 @@
     <section data-view="bezpieczenstwo" aria-label="Bezpieczeństwo" hidden>
       <div class="grid split-grid">
         <article class="card"><p class="eyebrow">Dostęp administratora</p><h2>Twoja sesja</h2><p id="session-method" class="muted"></p><p id="session-expiry" class="caption"></p></article>
+        <article class="card">
+          <h2>API konfiguracji</h2>
+          <p class="muted" id="config-token-status"></p>
+          <div class="page-actions">
+            <button id="create-config-token" type="button">Utwórz token</button>
+            <button id="revoke-config-token" class="secondary" type="button" hidden>Unieważnij</button>
+          </div>
+          <label id="config-token-secret" hidden>Skopiuj token i zapisz go w sekretach agenta.
+            <input id="config-token-value" readonly autocomplete="off">
+          </label>
+          <a class="text-link" href="./agent.md" target="_blank" rel="noopener noreferrer">Instrukcja dla agenta ↗</a>
+        </article>
         <article class="card" id="password-settings" hidden>
           <h2>Logowanie hasłem</h2><p id="password-state" class="muted"></p>
           <form id="set-password" class="stack">

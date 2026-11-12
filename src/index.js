@@ -3,6 +3,7 @@ import { prune, routeAdmin } from './admin.js';
 import { requireSession, routeAuth } from './auth.js';
 import { updatePassword } from './password.js';
 import { routeGemini } from './router.js';
+import { manageConfigToken, routeConfig } from './config-api.js';
 
 const geminiPath = /^\/(v1beta|v1)\/models\/([A-Za-z0-9_.-]{1,100}):(generateContent|streamGenerateContent|countTokens)$/;
 
@@ -35,10 +36,16 @@ export default {
         }
         if (auth) return finish(await routeAuth(request, env, url.pathname));
         const session = await requireSession(request, env.DB);
+        if (url.pathname === '/admin/config-token') {
+          return finish(await manageConfigToken(request, env.DB));
+        }
         if (url.pathname === '/admin/password') {
           return finish(await updatePassword(request, env, session));
         }
         return finish(await routeAdmin(request, env, url.pathname));
+      }
+      if (url.pathname === '/config/v1' || url.pathname.startsWith('/config/v1/')) {
+        return finish(await routeConfig(request, env, url.pathname));
       }
       if (url.pathname === '/health' && request.method === 'GET') {
         return finish(Response.json({ ok: true }));

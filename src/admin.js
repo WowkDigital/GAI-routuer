@@ -22,11 +22,11 @@ async function existingProject(db, projectId) {
   }
 }
 
-async function overview(db) {
+async function overview(db, includeRecent) {
   const now = Date.now();
   const minute = now - 60_000;
   const day = pacificDayStart(now);
-  const [projects, keys, apps, quotas, usage, recent] = await db.batch([
+  const [projects, keys, apps, quotas, usage, recent, configToken] = await db.batch([
     statement(db, 'SELECT id, name FROM projects ORDER BY name'),
     statement(db, `
       SELECT id, project_id, label, encrypted_key IS NOT NULL AS active, created_at
@@ -55,16 +55,19 @@ async function overview(db) {
       WHERE source = 'google' AND action != 'countTokens' AND started_at >= ?
       GROUP BY project_id, model
     `, minute, minute, minute, day, Math.min(minute, day)),
-    statement(db, `
+    ...(includeRecent ? [statement(db, `
       SELECT requests.id, app_id, apps.name AS app_name, model, action, started_at, source,
         status, latency_ms, input_tokens, total_tokens, body_state
       FROM requests JOIN apps ON apps.id = requests.app_id ORDER BY started_at DESC, requests.id DESC LIMIT 100
-    `)
+    `), statement(db, 'SELECT expires_at FROM config_token WHERE singleton = 1')] : [])
   ]);
   const usageKey = row => row.project_id + '/' + row.model;
   const counters = new Map(usage.results.map(row => [usageKey(row), row]));
   return {
-    projects: projects.results, keys: keys.results, apps: apps.results, recent: recent.results,
+    projects: projects.results, keys: keys.results, apps: apps.results,
+    ...(includeRecent ? {
+      recent: recent.results, config_token_expires_at: configToken.results[0]?.expires_at ?? null
+    } : {}),
     measured_at: now, usage: usage.results,
     quotas: quotas.results.map(q => {
       const { used_rpm = 0, known_tpm = 0, missing_tpm = 0, used_rpd = 0 } = counters.get(usageKey(q)) ?? {};
@@ -78,11 +81,11 @@ async function overview(db) {
   };
 }
 
-export async function routeAdmin(request, env, pathname) {
+export async function routeAdmin(request, env, pathname, { includeRecent = true } = {}) {
   const db = env.DB;
   const method = request.method;
   const path = pathname.slice('/admin/'.length);
-  if (method === 'GET' && path === 'overview') return Response.json(await overview(db));
+  if (method === 'GET' && path === 'overview') return Response.json(await overview(db, includeRecent));
 
   const detail = path.match(/^requests\/([0-9a-f-]{36})$/);
   if (method === 'GET' && detail) {

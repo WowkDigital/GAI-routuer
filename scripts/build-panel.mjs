@@ -12,7 +12,7 @@ if (origin) {
 
 const output = new URL('panel-dist/', root);
 await mkdir(output, { recursive: true });
-for (const file of ['app.js', 'catalog.js', 'limits.js', 'workspace.js', 'style.css', '.nojekyll']) {
+for (const file of ['app.js', 'catalog.js', 'limits.js', 'workspace.js', 'style.css', 'agent.md', '.nojekyll']) {
   await copyFile(new URL('docs/' + file, root), new URL(file, output));
 }
 const browserPackage = new URL('node_modules/@simplewebauthn/browser/', root);
